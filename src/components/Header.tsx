@@ -1,5 +1,5 @@
-import React from 'react';
-import { Bell, RefreshCw, Menu, UserCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bell, RefreshCw, Menu, UserCircle, Droplet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface HeaderProps {
@@ -14,6 +14,13 @@ interface HeaderProps {
   unreadCount?: number;
 }
 
+const ICON_CANDIDATES = [
+  '/assets/aistudio/file_0000000045e882119c7c9319efd48f08_cf9f259d.png',
+  '/logo.png',
+  '/icon.png',
+  '/pwa-192x192.png',
+];
+
 export const Header: React.FC<HeaderProps> = ({
   onOpenAuth,
   onOpenInstallModal,
@@ -26,7 +33,12 @@ export const Header: React.FC<HeaderProps> = ({
   unreadCount = 2,
 }) => {
   const { activeRole } = useAuth();
-  const iconPath = '/assets/aistudio/file_0000000045e882119c7c9319efd48f08_cf9f259d.png';
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const allFailed = candidateIndex >= ICON_CANDIDATES.length;
+
+  const handleImageError = () => {
+    setCandidateIndex((prev) => prev + 1);
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-100 shadow-xs">
@@ -36,24 +48,30 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2.5 shrink-0 overflow-hidden">
           <button 
             onClick={onOpenSidebar}
+            aria-label="القائمة"
             className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer"
           >
             <Menu className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-2 overflow-hidden">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            {/* الشعار الدائري: قطرة دم تنقذ حياة إنسان */}
             <div className="relative shrink-0">
-              <div className="p-0.5 rounded-full border-2 border-rose-500 shadow-sm">
-                <img
-                  src={iconPath}
-                  alt="أيقونة بنك الدم"
-                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
-                  }}
-                />
+              <div className="w-11 h-11 sm:w-12 sm:h-12 p-0.5 rounded-full border-2 border-[#e11d48] bg-white shadow-sm flex items-center justify-center overflow-hidden">
+                {!allFailed ? (
+                  <img
+                    src={ICON_CANDIDATES[candidateIndex]}
+                    alt="قطرة دم تنقذ حياة إنسان"
+                    className="w-full h-full rounded-full object-cover"
+                    onError={handleImageError}
+                  />
+                ) : (
+                  <div className="w-full h-full rounded-full bg-rose-50 flex flex-col items-center justify-center text-[#d3101c]">
+                    <Droplet className="w-5 h-5 fill-[#d3101c] text-[#d3101c]" />
+                  </div>
+                )}
               </div>
-              <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-emerald-500 border-2 border-white rounded-full"></span>
+              <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" />
             </div>
 
             <div className="flex flex-col text-right">
@@ -130,4 +148,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-
