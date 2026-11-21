@@ -59,7 +59,7 @@ const BloodDropBadge: React.FC<{ type: string; className?: string }> = ({ type, 
   </div>
 );
 
-export HeroBanner: React.FC<HeroBannerProps> = ({
+export const HeroBanner: React.FC<HeroBannerProps> = ({
   onNavigate,
   donors,
   urgentRequests,
