@@ -11,7 +11,7 @@ export const BloodDonationEducationalInfo: React.FC<BloodDonationEducationalInfo
   onBack,
   showSponsorCard = false,
 }) => {
-  const posterImagePath = '/assets/aistudio/file_0000000030cc821193cd25a471968ca3_9d4f13f6.png';
+  const posterImagePath = '/assets/aistudio/file_0000000030cc821193cd25a471968ca3_9d4f13f6.webp';
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4 text-right font-['Cairo',sans-serif] select-none">
