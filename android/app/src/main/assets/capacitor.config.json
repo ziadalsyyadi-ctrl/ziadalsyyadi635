@@ -7,6 +7,9 @@
 		"androidScheme": "https",
 		"cleartext": true
 	},
+	"android": {
+		"backgroundColor": "#F8FAFC"
+	},
 	"plugins": {
 		"FirebaseAuthentication": {
 			"skipNativeAuth": true,

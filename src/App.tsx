@@ -12,8 +12,14 @@ import {
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, reconnectFirestoreNetwork } from './firebase';
 import { checkForLiveUpdate } from './live-update';
+import {
+  clearRestoredUiSnapshot,
+  getRestoredUiSnapshot,
+  saveUiSnapshot,
+  subscribeAppLifecycle,
+} from './services/lifecycleService';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ActiveTab, BloodType, Donor, UrgentRequest } from './types';
 import {
@@ -105,8 +111,11 @@ function AppContent() {
     isGuest,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('home');
-  const [searchInitialBloodType, setSearchInitialBloodType] = useState<BloodType | 'ALL'>('ALL');
+  const initialSnapshotRef = useRef(getRestoredUiSnapshot());
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => initialSnapshotRef.current.activeTab);
+  const [searchInitialBloodType, setSearchInitialBloodType] = useState<BloodType | 'ALL'>(
+    () => initialSnapshotRef.current.searchInitialBloodType
+  );
   const [rawDonors, setRawDonors] = useState<Donor[]>(() => getInstantLocalDonorsSync());
   const [deletedDonors, setDeletedDonors] = useState<string[]>(() => getInstantDeletedDonorsSync());
   const [urgentRequests, setUrgentRequests] = useState<UrgentRequest[]>(() => getInstantLocalUrgentSync());
@@ -160,9 +169,28 @@ function AppContent() {
 
   const isInitializing = isLoading && !initTimeoutExceeded;
 
+  const searchBloodTypeRef = useRef<BloodType | 'ALL'>(searchInitialBloodType);
+  const hasRestoredScrollRef = useRef(false);
+
   useEffect(() => {
     activeTabRef.current = activeTab;
-  }, [activeTab]);
+    searchBloodTypeRef.current = searchInitialBloodType;
+    saveUiSnapshot({
+      activeTab,
+      searchInitialBloodType,
+    });
+  }, [activeTab, searchInitialBloodType]);
+
+  useEffect(() => {
+    if (isInitializing || hasRestoredScrollRef.current) return;
+    hasRestoredScrollRef.current = true;
+    const savedScrollY = initialSnapshotRef.current.scrollY;
+    if (savedScrollY > 0 && initialSnapshotRef.current.activeTab === activeTab) {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: savedScrollY, behavior: 'auto' });
+      });
+    }
+  }, [isInitializing, activeTab]);
 
   useEffect(() => {
     currentUserIdRef.current = currentUser?.uid || null;
@@ -175,30 +203,48 @@ function AppContent() {
     void dispatchUrgentAlert(alert);
   };
 
+  const silentForegroundResyncRef = useRef<() => Promise<void>>(async () => {});
+
   useEffect(() => {
     const handleOnline = () => {
       setIsOffline(false);
       setToastMessage('تمت استعادة الاتصال بالإنترنت! جاري تحديث ومزامنة البيانات مع السحابة...');
-      handleGlobalRefresh();
+      void reconnectFirestoreNetwork();
+      void handleGlobalRefresh();
     };
     const handleOffline = () => {
       setIsOffline(true);
       setToastMessage('انقطع الاتصال بالإنترنت. تم تفعيل وضع التخزين المحلي (Offline) وجميع المتبرعين متاحون فوراً!');
     };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && navigator.onLine) {
-        handleGlobalRefresh();
-      }
-    };
+
+    const unsubscribeLifecycle = subscribeAppLifecycle({
+      onPause: () => {
+        saveUiSnapshot({
+          activeTab: activeTabRef.current,
+          searchInitialBloodType: searchBloodTypeRef.current,
+          scrollY: window.scrollY || 0,
+        });
+      },
+      onResume: ({ backgroundDurationMs }) => {
+        const online = typeof navigator === 'undefined' ? true : navigator.onLine;
+        setIsOffline(!online);
+
+        if (online && backgroundDurationMs >= 10_000) {
+          void reconnectFirestoreNetwork();
+        }
+        if (online && backgroundDurationMs >= 60_000) {
+          void silentForegroundResyncRef.current();
+        }
+      },
+    });
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      unsubscribeLifecycle();
     };
   }, []);
 
@@ -375,6 +421,7 @@ function AppContent() {
     } catch (err) {
       console.error('Logout error:', err);
     }
+    clearRestoredUiSnapshot();
     localStorage.removeItem('blood_app_guest');
     localStorage.setItem('has_logged_out', 'true');
     setIsExitConfirmOpen(false);
@@ -657,6 +704,12 @@ function AppContent() {
     });
 
     const intervalId = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        return;
+      }
       loadSheetsDonors().then((sheetsList) => {
         if (active && sheetsList.length > 0) {
           mergeAndSaveDonors(firestoreDonorsRef.current, sheetsList);
@@ -675,10 +728,30 @@ function AppContent() {
     };
   }, []);
 
+  const silentForegroundResync = async () => {
+    try {
+      const [sheetsList, , latestWebsiteConfig] = await Promise.all([
+        loadSheetsDonors(),
+        checkForLiveUpdate(),
+        refreshWebsiteConfigFromServer().catch(() => null),
+      ]);
+      if (latestWebsiteConfig) {
+        setWebsiteConfig(latestWebsiteConfig);
+      }
+      if (sheetsList.length > 0) {
+        mergeAndSaveDonors(firestoreDonorsRef.current, sheetsList);
+      }
+    } catch (err) {
+      console.warn('Silent foreground resync note:', err);
+    }
+  };
+  silentForegroundResyncRef.current = silentForegroundResync;
+
   const handleGlobalRefresh = async () => {
     try {
       setIsRefreshing(true);
       setToastMessage(null);
+      await reconnectFirestoreNetwork();
       if (!Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
         try {
           const regs = await navigator.serviceWorker.getRegistrations();

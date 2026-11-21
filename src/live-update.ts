@@ -3,7 +3,7 @@ import { LiveUpdate } from '@capawesome/capacitor-live-update';
 
 const MANIFEST_URL = 'https://github.com/ziadalsyyadi-ctrl/ziadalsyyadi635/releases/download/ota-latest/manifest.json';
 const BUNDLE_BASE_URL = 'https://github.com/ziadalsyyadi-ctrl/ziadalsyyadi635/releases/download/';
-const MIN_AUTO_CHECK_INTERVAL_MS = 30_000;
+const MIN_AUTO_CHECK_INTERVAL_MS = 5 * 60_000;
 
 type LiveUpdateManifest = {
   bundleId: string;
@@ -162,14 +162,6 @@ export async function initializeLiveUpdates(): Promise<void> {
   } catch (error) {
     otaLog('فشل LiveUpdate.ready', error);
     return;
-  }
-
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && navigator.onLine) {
-        void checkForLiveUpdate();
-      }
-    });
   }
 
   if (typeof window !== 'undefined') {

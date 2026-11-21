@@ -2,14 +2,6 @@ name: "Build Android Packages - Bank AlDam Qataba"
 
 "on":
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - feat/ota-live-updates-from-v73
-      - test/official-package-id-v91
-      - fix/build94-six-notes
-      - fix/offline-cache-ota-v95
-      - fix/account-recovery-v105
 
 permissions:
   contents: write

@@ -1,7 +1,15 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFunctions } from 'firebase/functions';
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDocFromServer } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  doc,
+  getDocFromServer,
+  enableNetwork,
+} from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -87,6 +95,25 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
+}
+
+let lastNetworkReconnectAt = 0;
+
+export async function reconnectFirestoreNetwork(): Promise<void> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return;
+  }
+  const now = Date.now();
+  if (now - lastNetworkReconnectAt < 5000) {
+    return;
+  }
+  lastNetworkReconnectAt = now;
+
+  try {
+    await enableNetwork(db);
+  } catch (err) {
+    console.warn('Firestore network reconnect note:', err);
+  }
 }
 
 // CRITICAL CONSTRAINT: Test connection when app boots
