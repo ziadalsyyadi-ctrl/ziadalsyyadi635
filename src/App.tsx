@@ -991,7 +991,7 @@ function AppContent() {
           أنقذني
         </h1>
         <p className="text-xs sm:text-sm text-red-200/90 font-bold max-w-xs mb-8">
-          بنك الدم - قعطبه
+          بنك الدم مديرية قعطبة م/الضالع
         </p>
         <div className="flex items-center gap-3 px-4 py-2.5 rounded-full bg-white/10 backdrop-blur-md text-red-100 text-xs font-bold border border-white/10">
           <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>

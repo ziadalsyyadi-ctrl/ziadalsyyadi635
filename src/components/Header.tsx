@@ -33,15 +33,15 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-4xl mx-auto px-3 py-2 flex items-center justify-between gap-1.5">
         
         {/* Right Side: Hamburger + App Branding */}
-        <div className="flex items-center gap-2.5 shrink-0 overflow-hidden">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 overflow-hidden">
           <button 
             onClick={onOpenSidebar}
-            className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer"
+            className="w-10 h-10 shrink-0 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer"
           >
             <Menu className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-2 overflow-hidden">
+          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
             <div className="relative shrink-0">
               <div className="p-0.5 rounded-full border-2 border-rose-500 shadow-sm">
                 <img
@@ -56,12 +56,12 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-emerald-500 border-2 border-white rounded-full"></span>
             </div>
 
-            <div className="flex flex-col text-right">
+            <div className="flex flex-col text-right min-w-0">
               <h1 className="text-base sm:text-lg font-black text-[#d3101c] leading-none whitespace-nowrap">
                 أنقذني
               </h1>
-              <p className="text-[10px] sm:text-[11px] text-slate-600 font-bold mt-1 whitespace-nowrap leading-none">
-                بنك الدم - قعطبه
+              <p className="text-[9.5px] sm:text-[11px] text-slate-600 font-bold mt-1 leading-tight">
+                بنك الدم مديرية قعطبة م/الضالع
               </p>
             </div>
           </div>

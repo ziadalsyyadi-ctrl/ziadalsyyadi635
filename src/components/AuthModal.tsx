@@ -251,7 +251,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, isInitial
             أنقذني
           </h2>
           <p className="text-xs sm:text-sm font-extrabold text-slate-700">
-            بنك الدم - قعطبه
+            بنك الدم مديرية قعطبة م/الضالع
           </p>
 
           <div className="pt-0.5">

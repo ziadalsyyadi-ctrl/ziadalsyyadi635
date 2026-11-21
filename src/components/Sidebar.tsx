@@ -185,7 +185,7 @@ export const Sidebar: React.FC<SidebarProps & { onOpenChat: () => void }> = ({
               </div>
               <div>
                 <h2 className="text-xl font-black leading-tight text-white">أنقذني</h2>
-                <p className="text-[11px] font-bold text-red-100">بنك الدم - قعطبه</p>
+                <p className="text-[11px] font-bold text-red-100">بنك الدم مديرية قعطبة م/الضالع</p>
               </div>
             </div>
             <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-xl transition-colors">
