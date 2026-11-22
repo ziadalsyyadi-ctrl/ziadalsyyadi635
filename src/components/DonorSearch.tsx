@@ -188,7 +188,7 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
   };
 
   const confirmWhatsAppNavigation = (donor: Donor) => {
-    const message = `السلام عليكم أخي ${donor.fullName} الكريم،\nحصلت على رقمك من تطبيق (قطرة دم تنقذ حياة - سجل المتبرعين بقعطبة).\nلدينا حالة بحاجة ماسة لفصيلة الدم (${donor.bloodType})، هل أنت متاح للتبرع وجزاك الله خيراً؟`;
+    const message = `السلام عليكم أخي ${donor.fullName} الكريم،\nحصلت على رقمك من تطبيق أنقذني (بنك الدم مديرية قعطبة - سجل المتبرعين).\nلدينا حالة بحاجة ماسة لفصيلة الدم (${donor.bloodType})، هل أنت متاح للتبرع وجزاك الله خيراً؟`;
     openWhatsAppChat(donor.phone, message);
   };
 
@@ -726,7 +726,7 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
                   <a
                     href={getWhatsAppUrl(
                       donor.phone,
-                      `السلام عليكم أخي ${donor.fullName} الكريم،\nحصلت على رقمك من تطبيق (قطرة دم تنقذ حياة - سجل المتبرعين بقعطبة).\nلدينا حالة بحاجة ماسة لفصيلة الدم (${donor.bloodType})، هل أنت متاح للتبرع وجزاك الله خيراً؟`
+                      `السلام عليكم أخي ${donor.fullName} الكريم،\nحصلت على رقمك من تطبيق أنقذني (بنك الدم مديرية قعطبة - سجل المتبرعين).\nلدينا حالة بحاجة ماسة لفصيلة الدم (${donor.bloodType})، هل أنت متاح للتبرع وجزاك الله خيراً؟`
                     )}
                     onClick={(e) => {
                       e.preventDefault();
@@ -734,7 +734,7 @@ export const DonorSearch: React.FC<DonorSearchProps> = ({
                         setShowVisitorRestriction(true);
                         return;
                       }
-                      const message = `السلام عليكم أخي ${donor.fullName} الكريم،\nحصلت على رقمك من تطبيق (قطرة دم تنقذ حياة - سجل المتبرعين بقعطبة).\nلدينا حالة بحاجة ماسة لفصيلة الدم (${donor.bloodType})، هل أنت متاح للتبرع وجزاك الله خيراً؟`;
+                      const message = `السلام عليكم أخي ${donor.fullName} الكريم،\nحصلت على رقمك من تطبيق أنقذني (بنك الدم مديرية قعطبة - سجل المتبرعين).\nلدينا حالة بحاجة ماسة لفصيلة الدم (${donor.bloodType})، هل أنت متاح للتبرع وجزاك الله خيراً؟`;
                       openWhatsAppChat(donor.phone, message);
                     }}
                     target="_blank"
