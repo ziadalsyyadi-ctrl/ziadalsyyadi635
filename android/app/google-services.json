@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "303623115940",
+    "firebase_url": "https://a-drop-of-blood-saves-a-life-default-rtdb.firebaseio.com",
+    "project_id": "a-drop-of-blood-saves-a-life",
+    "storage_bucket": "a-drop-of-blood-saves-a-life.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:303623115940:android:38b60cc4cd52e5ec6f8231",
+        "android_client_info": {
+          "package_name": "com.qatrahayat.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "303623115940-3g8sjbf8g8tmjn7h2l2rkp14q73d7eh2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.qatrahayat.app",
+            "certificate_hash": "d14a722dfda8c6988f3dc4c63af0c77ecec76316"
+          }
+        },
+        {
+          "client_id": "303623115940-2veemdmqto16oa6n2jeo16umdi6t3eoc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3GJAyyHxvUYe0bp5rnA63vgki5GBQTdc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "303623115940-2veemdmqto16oa6n2jeo16umdi6t3eoc.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
