@@ -210,6 +210,7 @@ jobs:
           echo "Original release keystore and both certificate fingerprints verified."
 
       - name: "Build Google Play AAB"
+        shell: bash
         env:
           KEYSTORE_FILE: ${{ env.KEYSTORE_FILE || format('{0}/android/app/release-keystore.jks', github.workspace) }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -218,6 +219,7 @@ jobs:
           ANDROID_VERSION_CODE: ${{ env.ANDROID_VERSION_CODE }}
           ANDROID_VERSION_NAME: ${{ env.ANDROID_VERSION_NAME }}
         run: |
+          set -euo pipefail
           cd android
           chmod +x gradlew
           ./gradlew bundleRelease --no-daemon --stacktrace 2>&1 | tee ../gradle_bundle.log || {
@@ -232,6 +234,7 @@ jobs:
           cd ..
 
       - name: "Build release APK"
+        shell: bash
         env:
           KEYSTORE_FILE: ${{ env.KEYSTORE_FILE || format('{0}/android/app/release-keystore.jks', github.workspace) }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -240,6 +243,7 @@ jobs:
           ANDROID_VERSION_CODE: ${{ env.ANDROID_VERSION_CODE }}
           ANDROID_VERSION_NAME: ${{ env.ANDROID_VERSION_NAME }}
         run: |
+          set -euo pipefail
           cd android
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee ../gradle_assemble.log || {
             STATUS=$?
@@ -257,6 +261,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release_files
+          if [ ! -d "android/app/build/outputs/bundle" ] || [ ! -d "android/app/build/outputs/apk" ]; then
+            echo "::error::Expected Android build output directories were not created."
+            exit 1
+          fi
           AAB_FILE=$(find android/app/build/outputs/bundle -type f -name "*.aab" -print -quit)
           APK_FILE=$(find android/app/build/outputs/apk -type f -name "*.apk" -print -quit)
 
