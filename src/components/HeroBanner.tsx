@@ -22,6 +22,7 @@ interface HeroBannerProps {
   urgentRequests: UrgentRequest[];
   onOpenCompatibility: () => void;
   onOpenWebsite?: () => void;
+  heroBannerUrl?: string;
 }
 
 // Custom SVG Blood Droplet Badge matching the user's attached design
@@ -65,8 +66,10 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   urgentRequests,
   onOpenCompatibility,
   onOpenWebsite,
+  heroBannerUrl,
 }) => {
-  const heroImagePath = '/assets/aistudio/file_0000000095248211b993231fe2c26b0d_43df0429.webp';
+  const defaultHeroPath = '/assets/aistudio/file_0000000095248211b993231fe2c26b0d_43df0429.webp';
+  const heroImagePath = heroBannerUrl && heroBannerUrl.trim() ? heroBannerUrl.trim() : defaultHeroPath;
   const WHATSAPP_NUMBER = '773633918';
   const WHATSAPP_URL = `https://wa.me/967${WHATSAPP_NUMBER}`;
 

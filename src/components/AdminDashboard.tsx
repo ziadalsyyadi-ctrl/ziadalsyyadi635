@@ -82,6 +82,7 @@ interface AdminDashboardProps {
   onGlobalRefresh?: () => Promise<void>;
   onOpenSupervisors?: () => void;
   isRefreshing?: boolean;
+  heroBannerUrl?: string;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
@@ -93,6 +94,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onGlobalRefresh,
   onOpenSupervisors,
   isRefreshing = false,
+  heroBannerUrl = '',
 }) => {
   const {
     userProfile,
@@ -138,6 +140,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
   const [adminAuthLoading, setAdminAuthLoading] = useState(false);
+
+  // Hero Banner management states
+  const [bannerUrlInput, setBannerUrlInput] = useState(heroBannerUrl);
+  const [isSavingBanner, setIsSavingBanner] = useState(false);
+  const [bannerSaveResult, setBannerSaveResult] = useState<{ success: boolean; message: string } | null>(null);
+  const bannerFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (heroBannerUrl !== undefined) {
+      setBannerUrlInput(heroBannerUrl);
+    }
+  }, [heroBannerUrl]);
+
+  const handleSaveHeroBanner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !canManageSettings) return;
+    setIsSavingBanner(true);
+    setBannerSaveResult(null);
+    try {
+      await setDoc(
+        doc(db, 'settings', 'global'),
+        {
+          heroBannerUrl: bannerUrlInput.trim(),
+          updatedAt: serverTimestamp(),
+          updatedBy: currentUser.uid,
+        },
+        { merge: true }
+      );
+      writeAudit('تحديث البنر الرئيسي', undefined, 'إدارة البنر الرئيسي');
+      setBannerSaveResult({ success: true, message: 'تم تحديث البنر الرئيسي بنجاح للجميع! ✓' });
+      setTimeout(() => setBannerSaveResult(null), 4000);
+    } catch (err: any) {
+      setBannerSaveResult({ success: false, message: `فشل حفظ البنر: ${err.message}` });
+    } finally {
+      setIsSavingBanner(false);
+    }
+  };
+
+  const handleBannerFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        setBannerUrlInput(result);
+        setBannerSaveResult({ success: true, message: 'تم تحميل الصورة بنجاح. اضغط "حفظ وتحديث البنر للجميع" لتطبيقها فوراً.' });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Donors management states
   const [adminSearchQuery, setAdminSearchQuery] = useState('');
@@ -1273,6 +1326,111 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }`}>
                 {websiteSaveResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
                 <span>{websiteSaveResult.message}</span>
+              </div>
+            )}
+          </form>
+        </div>
+        )}
+
+        {/* Hero Banner Management Card - Settings / Admin */}
+        {canManageSettings && (
+        <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-slate-900">
+              <Upload className="w-5 h-5 text-red-600" />
+              <h2 className="text-sm font-black">🖼️ إدارة البنر الرئيسي (صورة الواجهة)</h2>
+            </div>
+            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-red-100 text-red-800">
+              تخزين سحابي فوري ✓
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-600 leading-relaxed">
+            قم بتغيير الصورة الرئيسية للبنر من هنا. يتم حفظ الصورة في سحابة Firebase Firestore دون تعديل أي ملفات في المشروع، ويظهر التحديث فوراً لجميع المستخدمين.
+          </p>
+
+          <form onSubmit={handleSaveHeroBanner} className="space-y-3">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                رابط الصورة أو معاينة البنر:
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="url"
+                  dir="ltr"
+                  value={bannerUrlInput}
+                  onChange={(e) => {
+                    setBannerUrlInput(e.target.value);
+                    setBannerSaveResult(null);
+                  }}
+                  placeholder="https://example.com/banner.webp"
+                  className="flex-1 p-2.5 rounded-xl border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-100 outline-hidden text-xs font-mono font-bold text-left bg-slate-50"
+                />
+                <input
+                  type="file"
+                  ref={bannerFileInputRef}
+                  onChange={handleBannerFileSelect}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => bannerFileInputRef.current?.click()}
+                  className="py-2.5 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+                >
+                  <Upload className="w-4 h-4 text-slate-600" />
+                  <span>رفع صورة</span>
+                </button>
+              </div>
+            </div>
+
+            {bannerUrlInput && (
+              <div className="p-2 rounded-2xl bg-slate-50 border border-slate-200 overflow-hidden">
+                <p className="text-[10px] font-bold text-slate-500 mb-1.5 px-1">معاينة البنر الحالي:</p>
+                <div className="w-full h-32 rounded-xl overflow-hidden bg-white flex items-center justify-center border border-slate-200">
+                  <img
+                    src={bannerUrlInput}
+                    alt="معاينة البنر"
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="submit"
+                disabled={isSavingBanner}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs shadow-md shadow-red-100 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                <Upload className="w-4 h-4" />
+                <span>{isSavingBanner ? 'جارٍ الحفظ في السحابة...' : 'حفظ وتحديث البنر للجميع'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setBannerUrlInput('');
+                  setBannerSaveResult(null);
+                }}
+                className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition-colors cursor-pointer"
+                title="استعادة البنر الافتراضي"
+              >
+                استعادة الافتراضي
+              </button>
+            </div>
+
+            {bannerSaveResult && (
+              <div className={`p-2.5 rounded-xl flex items-center gap-2 text-xs font-bold ${
+                bannerSaveResult.success
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                  : 'bg-red-50 text-red-700 border border-red-100'
+              }`}>
+                {bannerSaveResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                <span>{bannerSaveResult.message}</span>
               </div>
             )}
           </form>

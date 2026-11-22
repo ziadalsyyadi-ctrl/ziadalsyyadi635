@@ -245,14 +245,13 @@ export function openOfflineDB(): Promise<IDBDatabase> {
 
 export function getInstantCachedSheetsDonorsSync(): Donor[] {
   const deleted = getInstantDeletedDonorsSync();
-  if (typeof window === 'undefined') return filterDeletedDonors(BUNDLED_SHEETS_DONORS, deleted);
-
+  let stored: Donor[] = [];
   try {
     const rawSheets = localStorage.getItem(LOCAL_STORAGE_SHEETS_KEY);
     if (rawSheets !== null) {
       const parsed = JSON.parse(rawSheets);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return filterDeletedDonors(parsed.map(sanitizeDonorForStorage), deleted);
+        stored = parsed.map(sanitizeDonorForStorage);
       }
     }
 
@@ -261,8 +260,8 @@ export function getInstantCachedSheetsDonorsSync(): Donor[] {
       const parsedCombined = JSON.parse(rawCombined);
       if (Array.isArray(parsedCombined)) {
         const sheetSlice = parsedCombined.filter(isSheetDonorRecord).map(sanitizeDonorForStorage);
-        if (sheetSlice.length > 0) {
-          return filterDeletedDonors(sheetSlice, deleted);
+        if (sheetSlice.length > stored.length) {
+          stored = sheetSlice;
         }
       }
     }
@@ -270,7 +269,15 @@ export function getInstantCachedSheetsDonorsSync(): Donor[] {
     console.warn('تعذر قراءة كاش متبرعي Google Sheets:', err);
   }
 
-  return filterDeletedDonors(BUNDLED_SHEETS_DONORS, deleted);
+  // Always ensure all bundled sheets donors are included
+  if (stored.length < BUNDLED_SHEETS_DONORS.length) {
+    const map = new Map<string, Donor>();
+    for (const d of BUNDLED_SHEETS_DONORS) map.set(d.id, d);
+    for (const d of stored) map.set(d.id, d);
+    stored = Array.from(map.values());
+  }
+
+  return filterDeletedDonors(stored, deleted);
 }
 
 export function getInstantCachedFirestoreDonorsSync(): Donor[] {

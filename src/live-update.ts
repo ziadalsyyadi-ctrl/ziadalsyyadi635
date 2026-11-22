@@ -113,6 +113,11 @@ export async function checkForLiveUpdate(options?: { force?: boolean }): Promise
     return { status: 'skipped' };
   }
 
+  if (options?.force) {
+    lastCheckStartedAt = 0;
+    activeCheckPromise = null;
+  }
+
   if (!readyCompleted) {
     try {
       await LiveUpdate.ready();

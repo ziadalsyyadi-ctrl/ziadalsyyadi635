@@ -122,6 +122,13 @@ function AppContent() {
 
   const [announcement, setAnnouncement] = useState('');
   const [announcementType, setAnnouncementType] = useState<'general' | 'urgent' | 'campaign'>('general');
+  const [heroBannerUrl, setHeroBannerUrl] = useState<string>(() => {
+    try {
+      return localStorage.getItem('qataba_hero_banner_url_v1') || '';
+    } catch {
+      return '';
+    }
+  });
   const [announcementTime, setAnnouncementTime] = useState('');
   const [draftAnnouncement, setDraftAnnouncement] = useState('');
   const [draftAnnouncementType, setDraftAnnouncementType] = useState<'general' | 'urgent' | 'campaign'>('general');
@@ -657,6 +664,12 @@ function AppContent() {
         setAnnouncement(notice);
         setAnnouncementType(noticeType);
         if (noticeTime) setAnnouncementTime(noticeTime);
+        if (typeof data.heroBannerUrl === 'string') {
+          setHeroBannerUrl(data.heroBannerUrl);
+          try {
+            localStorage.setItem('qataba_hero_banner_url_v1', data.heroBannerUrl);
+          } catch {}
+        }
         if (Array.isArray(data.deletedDonors)) {
           setDeletedDonors(data.deletedDonors);
           saveDeletedDonorsSync(data.deletedDonors);
@@ -767,6 +780,8 @@ function AppContent() {
       const count = mergeAndSaveDonors(firestoreDonorsRef.current, sheetsList);
       if (otaResult.status === 'downloaded' || otaResult.status === 'pending') {
         setToastMessage(`تم تحديث البيانات (${count} متبرع) وتنزيل حزمة تحديث جديدة للتطبيق (OTA) بنجاح! سيتم تطبيقها تلقائياً عند إعادة فتح التطبيق.`);
+      } else if (otaResult.status === 'error') {
+        setToastMessage(`تم تحديث البيانات (${count} متبرع)، ولكن تعذر الاتصال بخادم تحديثات التطبيق (OTA) أو فشل الفحص. يرجى المحاولة مرة أخرى.`);
       } else {
         setToastMessage(`تم التحديث الشامل بنجاح! تم مزامنة ${count} متبرع وتأكيد أحدث إصدار متاح.`);
       }
@@ -1221,6 +1236,7 @@ function AppContent() {
                 urgentRequests={activeUrgentRequests}
                 onOpenCompatibility={() => setIsCompatibilityOpen(true)}
                 onOpenWebsite={handleOpenOfficialWebsite}
+                heroBannerUrl={heroBannerUrl}
               />
             </div>
           )}
@@ -1295,6 +1311,7 @@ function AppContent() {
               onGlobalRefresh={handleGlobalRefresh}
               onOpenSupervisors={isOwner ? openSupervisorsTab : undefined}
               isRefreshing={isRefreshing}
+              heroBannerUrl={heroBannerUrl}
             />
           )}
 
