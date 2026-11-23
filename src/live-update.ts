@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { LiveUpdate } from '@capawesome/capacitor-live-update';
 
 const MANIFEST_URL = 'https://github.com/ziadalsyyadi-ctrl/ziadalsyyadi635/releases/download/ota-latest/manifest.json';
@@ -51,33 +51,87 @@ function isValidManifest(value: unknown): value is LiveUpdateManifest {
   );
 }
 
-async function runLiveUpdateCheck(): Promise<LiveUpdateCheckResult> {
-  otaLog('بدء فحص manifest', MANIFEST_URL);
+async function fetchManifestData(): Promise<unknown | null> {
+  // In native Android/iOS, use CapacitorHttp to bypass WebView CORS and redirect blocks on GitHub
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const nativeRes = await CapacitorHttp.get({
+        url: MANIFEST_URL,
+        headers: {
+          Accept: 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+        },
+        connectTimeout: 12000,
+        readTimeout: 15000,
+      });
 
+      if (nativeRes.status >= 200 && nativeRes.status < 300) {
+        if (typeof nativeRes.data === 'string') {
+          try {
+            return JSON.parse(nativeRes.data);
+          } catch {
+            return null;
+          }
+        }
+        return nativeRes.data;
+      }
+      otaLog('CapacitorHttp returned non-200 status', { status: nativeRes.status });
+    } catch (nativeErr) {
+      otaLog('CapacitorHttp fetch error, falling back to window.fetch', nativeErr);
+    }
+  }
+
+  // Fallback to standard fetch
   try {
     const response = await fetch(MANIFEST_URL, {
       cache: 'no-store',
       headers: { Accept: 'application/json' },
     });
+    if (response.ok) {
+      return await response.json();
+    }
+    otaLog('Fetch failed with status', { status: response.status, statusText: response.statusText });
+  } catch (fetchErr) {
+    otaLog('Fetch caught error', fetchErr);
+  }
 
-    if (!response.ok) {
-      otaLog('فشل جلب manifest', { status: response.status, statusText: response.statusText });
+  return null;
+}
+
+async function runLiveUpdateCheck(): Promise<LiveUpdateCheckResult> {
+  otaLog('بدء فحص manifest', MANIFEST_URL);
+
+  try {
+    const manifestData = await fetchManifestData();
+    if (!manifestData || !isValidManifest(manifestData)) {
+      otaLog('manifest غير متاح أو لا يطابق التنسيق المطلوب');
       return { status: 'error' };
     }
 
-    const manifest: unknown = await response.json();
-    if (!isValidManifest(manifest)) {
-      otaLog('manifest غير صالح أو حقوله لا تطابق التنسيق المتوقع');
-      return { status: 'error' };
-    }
+    const manifest = manifestData;
 
-    const [{ bundleId: currentBundleId }, { bundleId: nextBundleId }] =
-      await Promise.all([
-        LiveUpdate.getCurrentBundle(),
-        LiveUpdate.getNextBundle(),
-      ]);
+    const [
+      currentBundleRes,
+      nextBundleRes,
+      downloadedRes,
+    ] = await Promise.all([
+      LiveUpdate.getCurrentBundle().catch(() => ({ bundleId: '' })),
+      LiveUpdate.getNextBundle().catch(() => ({ bundleId: '' })),
+      LiveUpdate.getDownloadedBundles().catch(() => ({ bundleIds: [] })),
+    ]);
 
-    otaLog('تم فحص الحزم', { publishedBundleId: manifest.bundleId, currentBundleId, nextBundleId });
+    const currentBundleId = currentBundleRes?.bundleId || '';
+    const nextBundleId = nextBundleRes?.bundleId || '';
+    const downloadedBundleIds: string[] = Array.isArray(downloadedRes?.bundleIds)
+      ? downloadedRes.bundleIds
+      : [];
+
+    otaLog('تم فحص الحزم', {
+      publishedBundleId: manifest.bundleId,
+      currentBundleId,
+      nextBundleId,
+      downloadedCount: downloadedBundleIds.length,
+    });
 
     if (manifest.bundleId === currentBundleId) {
       otaLog('التطبيق يستخدم بالفعل الحزمة المنشورة');
@@ -89,15 +143,29 @@ async function runLiveUpdateCheck(): Promise<LiveUpdateCheckResult> {
       return { status: 'pending', bundleId: manifest.bundleId };
     }
 
-    otaLog('بدء تنزيل الحزمة', manifest.bundleId);
-    await LiveUpdate.downloadBundle({
-      artifactType: 'zip',
-      bundleId: manifest.bundleId,
-      url: manifest.url,
-      checksum: manifest.checksum.toLowerCase(),
-      signature: manifest.signature,
-    });
-    otaLog('اكتمل تنزيل الحزمة والتحقق منها', manifest.bundleId);
+    // If the bundle is already downloaded locally, skip re-downloading to prevent BUNDLE_EXISTS error
+    if (!downloadedBundleIds.includes(manifest.bundleId)) {
+      otaLog('بدء تنزيل الحزمة', manifest.bundleId);
+      try {
+        await LiveUpdate.downloadBundle({
+          artifactType: 'zip',
+          bundleId: manifest.bundleId,
+          url: manifest.url,
+          checksum: manifest.checksum.toLowerCase(),
+          signature: manifest.signature,
+        });
+        otaLog('اكتمل تنزيل الحزمة والتحقق منها بنجاح', manifest.bundleId);
+      } catch (dlError: any) {
+        const errorMsg = String(dlError?.message || dlError || '').toLowerCase();
+        if (errorMsg.includes('already exists') || errorMsg.includes('bundle_exists')) {
+          otaLog('الحزمة موجودة بالفعل محلياً، المتابعة بتعيينها');
+        } else {
+          throw dlError;
+        }
+      }
+    } else {
+      otaLog('الحزمة المنشورة تم تحميلها مسبقاً في الذاكرة المحلية', manifest.bundleId);
+    }
 
     await LiveUpdate.setNextBundle({ bundleId: manifest.bundleId });
     otaLog('تم تعيين الحزمة لتطبيقها عند التشغيل القادم', manifest.bundleId);
