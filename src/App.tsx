@@ -4,7 +4,6 @@ import {
   Droplet,
   HardDriveDownload,
   Heart,
-  Hospital,
   Megaphone,
   RefreshCw,
   ShieldCheck,
@@ -1285,18 +1284,7 @@ function AppContent() {
           )}
 
           {activeTab === 'hospitals' && (
-            <div className="w-full max-w-4xl mx-auto space-y-4">
-              <SubpageBackBar
-                title="دليل المستشفيات والنقاط الطبية"
-                onBack={navigateToHome}
-              />
-              <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200/90 text-center">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-inner">
-                  <Hospital className="w-7 h-7 sm:w-8 sm:h-8" />
-                </div>
-                <h2 className="text-lg sm:text-xl font-black text-slate-900">دليل المستشفيات والنقاط الطبية</h2>
-                <p className="text-xs sm:text-sm text-slate-500 font-bold mt-1">مديرية قعطبة - الضالع</p>
-              </div>
+            <div className="w-full max-w-4xl mx-auto">
               <QaetabahHospitalsDirectory isOpen={true} isEmbedded={true} onClose={navigateToHome} />
             </div>
           )}

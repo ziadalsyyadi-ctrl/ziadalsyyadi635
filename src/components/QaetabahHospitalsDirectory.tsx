@@ -138,7 +138,7 @@ export const QaetabahHospitalsDirectory: React.FC<QaetabahHospitalsDirectoryProp
               دليل المستشفيات والنقاط الطبية
             </h3>
             <p className="text-xs text-red-100 font-medium">
-              مديرية قعطبة • مستشفيات وبنوك الدم المعتمدة
+              مديرية قعطبة • مستشفيات ومراكز صحية
             </p>
           </div>
         </div>
@@ -199,7 +199,7 @@ export const QaetabahHospitalsDirectory: React.FC<QaetabahHospitalsDirectoryProp
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ابحث باسم المستشفى، العنوان، أو الخدمات..."
+              placeholder="ابحث عن المستشفيات..."
               className="w-full pl-4 pr-10 py-2.5 rounded-2xl bg-white border border-slate-200 text-xs font-bold text-slate-800 outline-hidden focus:ring-2 focus:ring-red-500 shadow-2xs"
             />
           </div>
@@ -384,10 +384,11 @@ export const QaetabahHospitalsDirectory: React.FC<QaetabahHospitalsDirectoryProp
           </div>
         )}
 
-        {/* Footer info */}
-        <div className="p-3 bg-slate-50 border-t border-slate-100 text-center text-[11px] text-slate-500 font-bold">
-          🏥 يتم تحديث الدليل الطبي لمديرية قعطبة دورياً لخدمة المرضى والمتبرعين
-        </div>
+        {!isEmbedded && (
+          <div className="p-3 bg-slate-50 border-t border-slate-100 text-center text-[11px] text-slate-500 font-bold">
+            🏥 يتم تحديث الدليل الطبي لمديرية قعطبة دورياً لخدمة المرضى والمتبرعين
+          </div>
+        )}
       </div>
   );
 
