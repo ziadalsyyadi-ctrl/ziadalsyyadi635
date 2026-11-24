@@ -1,24 +1,101 @@
 name: Build and publish Bank AlDam Qataba OTA
 
 on:
+  repository_dispatch:
+    types:
+      - build-ota
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - feat/ota-live-updates-from-v73
-      - fix/offline-cache-ota-v95
-      - fix/account-recovery-v105
+    inputs:
+      source_ref:
+        description: "Source branch or commit SHA in ziadalsyyadi-ctrl/ziad"
+        required: false
+        default: "main"
 
 permissions:
   contents: write
 
 jobs:
-  build-and-publish:
-    if: github.repository == 'ziadalsyyadi-ctrl/ziadalsyyadi635' || github.event_name == 'workflow_dispatch'
+  dispatch-from-private:
+    name: Forward manual OTA request to ziadalsyyadi635
+    if: github.repository != 'ziadalsyyadi-ctrl/ziadalsyyadi635' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout OTA branch
+      - name: Dispatch OTA build to ziadalsyyadi635
+        env:
+          GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          SOURCE_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_REF: ${{ github.event.inputs.source_ref || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_RELEASE_TOKEN:-}" ]; then
+            echo "::error::Missing repository secret GH_RELEASE_TOKEN."
+            exit 1
+          fi
+          PAYLOAD=$(node -e '
+            console.log(JSON.stringify({
+              event_type: "build-ota",
+              client_payload: {
+                source_repo: process.env.SOURCE_REPO,
+                source_sha: process.env.SOURCE_SHA,
+                source_ref: process.env.SOURCE_REF
+              }
+            }));
+          ')
+          HTTP_CODE=$(curl -sS -o /tmp/dispatch_resp.txt -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer $GH_RELEASE_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "https://api.github.com/repos/ziadalsyyadi-ctrl/ziadalsyyadi635/dispatches")
+          if [ "$HTTP_CODE" != "204" ]; then
+            cat /tmp/dispatch_resp.txt || true
+            echo "::error::Failed to trigger build-ota dispatch on ziadalsyyadi-ctrl/ziadalsyyadi635 (HTTP $HTTP_CODE)."
+            exit 1
+          fi
+          echo "Dispatched OTA build to ziadalsyyadi-ctrl/ziadalsyyadi635 for ${SOURCE_REPO}@${SOURCE_REF}."
+
+  build-and-publish:
+    name: Build OTA from private source and publish to public Releases
+    if: github.repository == 'ziadalsyyadi-ctrl/ziadalsyyadi635'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify access to source repository
+        env:
+          REPO_TOKEN: ${{ secrets.ZIAD_REPO_TOKEN || secrets.GH_RELEASE_TOKEN }}
+          SOURCE_REPO: ${{ github.event.client_payload.source_repo || 'ziadalsyyadi-ctrl/ziad' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          AUTH_ARGS=()
+          if [ -n "${REPO_TOKEN:-}" ]; then
+            AUTH_ARGS=(-H "Authorization: Bearer ${REPO_TOKEN}")
+          fi
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "${AUTH_ARGS[@]}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${SOURCE_REPO}")
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Cannot access ${SOURCE_REPO} (HTTP ${STATUS}). If ${SOURCE_REPO} is private, add secret ZIAD_REPO_TOKEN (with repo read access to ziad) in ziadalsyyadi635."
+            exit 1
+          fi
+
+      - name: Checkout source repository
         uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.client_payload.source_repo || 'ziadalsyyadi-ctrl/ziad' }}
+          ref: ${{ github.event.client_payload.source_sha || github.event.inputs.source_ref || 'main' }}
+          token: ${{ secrets.ZIAD_REPO_TOKEN || secrets.GH_RELEASE_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Resolve source commit SHA for bundle ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          echo "BUNDLE_ID=${SOURCE_SHA}" >> "$GITHUB_ENV"
+          echo "Resolved OTA bundle ID from source commit: ${SOURCE_SHA}"
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
@@ -31,18 +108,14 @@ jobs:
 
       - name: Resolve sequential OTA version
         env:
-          GH_TOKEN: ${{ github.repository == 'ziadalsyyadi-ctrl/ziadalsyyadi635' && secrets.GITHUB_TOKEN || secrets.GH_RELEASE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
           PUBLISHED_PATCH=-1
 
-          AUTH_ARGS=()
-          if [ -n "${GH_TOKEN:-}" ]; then
-            AUTH_ARGS=(-H "Authorization: Bearer ${GH_TOKEN}")
-          fi
-
-          OTA_JSON="$(curl -sS -H "Accept: application/vnd.github+json" "${AUTH_ARGS[@]}" \
+          OTA_JSON="$(curl -sS -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
             "https://api.github.com/repos/ziadalsyyadi-ctrl/ziadalsyyadi635/releases/tags/ota-latest" || true)"
 
           if echo "$OTA_JSON" | grep -q '"tag_name"'; then
@@ -74,7 +147,7 @@ jobs:
       - name: Create and sign OTA ZIP
         env:
           OTA_PRIVATE_KEY: ${{ secrets.OTA_PRIVATE_KEY }}
-          BUNDLE_ID: ${{ github.sha }}
+          BUNDLE_ID: ${{ env.BUNDLE_ID }}
         shell: bash
         run: |
           set -euo pipefail
@@ -112,35 +185,23 @@ jobs:
           SIGNATURE="$(base64 -w 0 .ota-work/signature.bin)"
           echo "CHECKSUM=$CHECKSUM" >> "$GITHUB_ENV"
           echo "SIGNATURE=$SIGNATURE" >> "$GITHUB_ENV"
-          echo "BUNDLE_ID=$BUNDLE_ID" >> "$GITHUB_ENV"
-
-      - name: Verify GitHub release token
-        env:
-          GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "${GH_RELEASE_TOKEN:-}" ] && [ "${GITHUB_REPOSITORY}" != "ziadalsyyadi-ctrl/ziadalsyyadi635" ]; then
-            echo "::error::Missing repository secret GH_RELEASE_TOKEN for cross-repository release upload."
-            exit 1
-          fi
 
       - name: Publish OTA ZIP to public GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
           repository: ziadalsyyadi-ctrl/ziadalsyyadi635
-          token: ${{ github.repository == 'ziadalsyyadi-ctrl/ziadalsyyadi635' && secrets.GITHUB_TOKEN || secrets.GH_RELEASE_TOKEN }}
-          tag_name: ota-${{ github.sha }}
-          name: Bank AlDam OTA ${{ github.sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ota-${{ env.BUNDLE_ID }}
+          name: Bank AlDam OTA ${{ env.BUNDLE_ID }}
           target_commitish: main
-          files: ota-dist/bundles/${{ github.sha }}.zip
+          files: ota-dist/bundles/${{ env.BUNDLE_ID }}.zip
           overwrite_files: true
           fail_on_unmatched_files: true
           make_latest: false
 
       - name: Create OTA manifest
         env:
-          BUNDLE_ID: ${{ github.sha }}
+          BUNDLE_ID: ${{ env.BUNDLE_ID }}
           CHECKSUM: ${{ env.CHECKSUM }}
           SIGNATURE: ${{ env.SIGNATURE }}
         run: |
@@ -160,12 +221,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           repository: ziadalsyyadi-ctrl/ziadalsyyadi635
-          token: ${{ github.repository == 'ziadalsyyadi-ctrl/ziadalsyyadi635' && secrets.GITHUB_TOKEN || secrets.GH_RELEASE_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ota-latest
           name: Bank AlDam OTA manifest v${{ env.VITE_APP_VERSION }} (latest)
           body: |
             App Version: ${{ env.VITE_APP_VERSION }}
-            Bundle ID: ${{ github.sha }}
+            Bundle ID: ${{ env.BUNDLE_ID }}
           target_commitish: main
           files: ota-dist/manifest.json
           overwrite_files: true

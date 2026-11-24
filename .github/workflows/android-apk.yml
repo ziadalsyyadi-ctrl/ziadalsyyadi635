@@ -1,21 +1,95 @@
 name: "Build Android Packages - Bank AlDam Qataba"
 
 "on":
+  repository_dispatch:
+    types:
+      - build-android
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Source branch or commit SHA in ziadalsyyadi-ctrl/ziad"
+        required: false
+        default: "main"
 
 permissions:
   contents: write
 
 jobs:
+  dispatch-android-build:
+    name: "Forward Android build request to ziadalsyyadi635"
+    if: github.repository != 'ziadalsyyadi-ctrl/ziadalsyyadi635' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Dispatch build-android to ziadalsyyadi635"
+        env:
+          GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          SOURCE_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_REF: ${{ github.event.inputs.source_ref || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_RELEASE_TOKEN:-}" ]; then
+            echo "::error::Missing repository secret GH_RELEASE_TOKEN."
+            exit 1
+          fi
+          PAYLOAD=$(node -e '
+            console.log(JSON.stringify({
+              event_type: "build-android",
+              client_payload: {
+                source_repo: process.env.SOURCE_REPO,
+                source_sha: process.env.SOURCE_SHA,
+                source_ref: process.env.SOURCE_REF
+              }
+            }));
+          ')
+          HTTP_CODE=$(curl -sS -o /tmp/dispatch_resp.txt -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer $GH_RELEASE_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "https://api.github.com/repos/ziadalsyyadi-ctrl/ziadalsyyadi635/dispatches")
+          if [ "$HTTP_CODE" != "204" ]; then
+            cat /tmp/dispatch_resp.txt || true
+            echo "::error::Failed to trigger build-android dispatch on ziadalsyyadi-ctrl/ziadalsyyadi635 (HTTP $HTTP_CODE)."
+            exit 1
+          fi
+          echo "Dispatched Android build to ziadalsyyadi-ctrl/ziadalsyyadi635 for ${SOURCE_REPO}@${SOURCE_REF}."
+
   build-android:
     name: "Build AAB and APK with original release key"
-    if: github.repository == 'ziadalsyyadi-ctrl/ziadalsyyadi635' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'ziadalsyyadi-ctrl/ziadalsyyadi635'
     runs-on: ubuntu-latest
     environment: account-recovery
 
     steps:
-      - name: "Checkout repository"
+      - name: "Verify access to source repository"
+        env:
+          REPO_TOKEN: ${{ secrets.ZIAD_REPO_TOKEN || secrets.GH_RELEASE_TOKEN }}
+          SOURCE_REPO: ${{ github.event.client_payload.source_repo || 'ziadalsyyadi-ctrl/ziad' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          AUTH_ARGS=()
+          if [ -n "${REPO_TOKEN:-}" ]; then
+            AUTH_ARGS=(-H "Authorization: Bearer ${REPO_TOKEN}")
+          fi
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "${AUTH_ARGS[@]}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${SOURCE_REPO}")
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Cannot access ${SOURCE_REPO} (HTTP ${STATUS}). If ${SOURCE_REPO} is private, add secret ZIAD_REPO_TOKEN (with repo read access to ziad) in ziadalsyyadi635."
+            exit 1
+          fi
+
+      - name: "Checkout source repository"
         uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.client_payload.source_repo || 'ziadalsyyadi-ctrl/ziad' }}
+          ref: ${{ github.event.client_payload.source_sha || github.event.inputs.source_ref || 'main' }}
+          token: ${{ secrets.ZIAD_REPO_TOKEN || secrets.GH_RELEASE_TOKEN || github.token }}
+          persist-credentials: false
 
       - name: "Set up Java 21"
         uses: actions/setup-java@v4
@@ -276,17 +350,6 @@ jobs:
           cp "$AAB_FILE" release_files/Bank_AlDam_Qataba.aab
           cp "$APK_FILE" release_files/Bank_AlDam_Qataba.apk
 
-          # Never include signing keys, local environment files, or generated build outputs in the source archive.
-          zip -r release_files/Bank_AlDam_Qataba.zip . \
-            -x "node_modules/*" "dist/*" ".git/*" "android/.gradle/*" \
-               "android/app/build/*" "release_files/*" \
-               "*.jks" "**/*.jks" "*.keystore" "**/*.keystore" \
-               "*.p12" "**/*.p12" "*.pem" "**/*.pem" "*.key" "**/*.key" \
-               ".env" ".env.*" "**/.env" "**/.env.*" "cert_info.txt"
-          zip -j release_files/Bank_AlDam_Qataba.zip \
-            release_files/Bank_AlDam_Qataba.apk \
-            release_files/CERTIFICATE_FINGERPRINTS.txt
-
       - name: "Upload Google Play AAB"
         uses: actions/upload-artifact@v4
         with:
@@ -303,32 +366,11 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: "Upload project ZIP"
-        uses: actions/upload-artifact@v4
-        with:
-          name: Bank_AlDam_Qataba_Project_ZIP
-          path: release_files/Bank_AlDam_Qataba.zip
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: "Check GitHub release token availability"
-        env:
-          GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
-        shell: bash
-        run: |
-          if [ -n "${GH_RELEASE_TOKEN:-}" ] || [ "${GITHUB_REPOSITORY}" = "ziadalsyyadi-ctrl/ziadalsyyadi635" ]; then
-            echo "CAN_PUBLISH_RELEASE=true" >> "$GITHUB_ENV"
-          else
-            echo "CAN_PUBLISH_RELEASE=false" >> "$GITHUB_ENV"
-            echo "::warning::GH_RELEASE_TOKEN secret is not set; skipping release upload to ziadalsyyadi-ctrl/ziadalsyyadi635."
-          fi
-
       - name: "Publish APK and AAB to Bank AlDam Downloads release"
-        if: env.CAN_PUBLISH_RELEASE == 'true'
         uses: softprops/action-gh-release@v2
         with:
           repository: ziadalsyyadi-ctrl/ziadalsyyadi635
-          token: ${{ github.repository == 'ziadalsyyadi-ctrl/ziadalsyyadi635' && secrets.GITHUB_TOKEN || secrets.GH_RELEASE_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: android-latest
           name: Bank AlDam Qataba Android v${{ env.VITE_APP_VERSION }} (build ${{ env.ANDROID_VERSION_CODE }})
           body: |
@@ -339,7 +381,6 @@ jobs:
           files: |
             release_files/Bank_AlDam_Qataba.apk
             release_files/Bank_AlDam_Qataba.aab
-            release_files/Bank_AlDam_Qataba.zip
             release_files/CERTIFICATE_FINGERPRINTS.txt
           overwrite_files: true
           fail_on_unmatched_files: true

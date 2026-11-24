@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">بنك الدم -قعطبة</string>
-    <string name="title_activity_main">بنك الدم -قعطبة</string>
-    <string name="package_name">com.qatrahayat.app</string>
-    <string name="custom_url_scheme">com.qatrahayat.app</string>
-</resources>
