@@ -158,14 +158,17 @@ jobs:
 
           echo "Resolved sequential Android build -> versionCode=${NEXT_CODE}, appVersion=${APP_VER}"
 
-      - name: "Build web assets"
+      - name: "Build web assets (Google Play - OTA isolated)"
+        env:
+          VITE_DISABLE_OTA: "true"
         run: npm run build
 
-      - name: "Prepare Android platform"
+      - name: "Prepare Android platform (Google Play AAB)"
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          mkdir -p android/app
+          set -euo pipefail
+          mkdir -p android/app release_files
           if [ ! -s "android/app/google-services.json" ] && [ -s "google-services.json" ]; then
             cp google-services.json android/app/google-services.json
           fi
@@ -187,6 +190,53 @@ jobs:
           if [ ! -s "android/app/google-services.json" ] && [ -s "google-services.json" ]; then
             cp google-services.json android/app/google-services.json
           fi
+
+      - name: "Isolate Google Play AAB from OTA plugin and config"
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+
+          // 1. Exclude :capawesome-capacitor-live-update from Gradle settings for AAB
+          const settingsPath = 'android/capacitor.settings.gradle';
+          if (fs.existsSync(settingsPath)) {
+            const lines = fs.readFileSync(settingsPath, 'utf8').split('\n');
+            const filtered = lines.filter(line => !line.includes('capawesome-capacitor-live-update'));
+            fs.writeFileSync(settingsPath, filtered.join('\n'));
+          }
+
+          // 2. Exclude :capawesome-capacitor-live-update dependency from app/capacitor.build.gradle for AAB
+          const buildGradlePath = 'android/app/capacitor.build.gradle';
+          if (fs.existsSync(buildGradlePath)) {
+            const lines = fs.readFileSync(buildGradlePath, 'utf8').split('\n');
+            const filtered = lines.filter(line => !line.includes('capawesome-capacitor-live-update'));
+            fs.writeFileSync(buildGradlePath, filtered.join('\n'));
+          }
+
+          // 3. Remove LiveUpdate from synced Android assets/capacitor.plugins.json
+          const pluginsPath = 'android/app/src/main/assets/capacitor.plugins.json';
+          if (fs.existsSync(pluginsPath)) {
+            const plugins = JSON.parse(fs.readFileSync(pluginsPath, 'utf8'));
+            const filteredPlugins = plugins.filter(p => p.pkg !== '@capawesome/capacitor-live-update');
+            fs.writeFileSync(pluginsPath, JSON.stringify(filteredPlugins, null, '\t') + '\n');
+          }
+
+          // 4. Remove LiveUpdate section from synced Android assets/capacitor.config.json
+          const configPath = 'android/app/src/main/assets/capacitor.config.json';
+          if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            if (config.plugins && config.plugins.LiveUpdate) {
+              delete config.plugins.LiveUpdate;
+            }
+            fs.writeFileSync(configPath, JSON.stringify(config, null, '\t') + '\n');
+          }
+          NODE
+
+          if grep -rnE "capawesome-capacitor-live-update|LiveUpdatePlugin|ziadalsyyadi635" android/app/src/main/assets android/app/capacitor.build.gradle android/capacitor.settings.gradle; then
+            echo "::error::OTA references were not completely isolated from the Google Play AAB build!"
+            exit 1
+          fi
+          echo "Verified complete OTA isolation for Google Play AAB."
 
       - name: "Verify Firebase Android configuration"
         run: |
@@ -283,7 +333,7 @@ jobs:
           rm -f cert_info.txt
           echo "Original release keystore and both certificate fingerprints verified."
 
-      - name: "Build Google Play AAB"
+      - name: "Build Google Play AAB (without OTA)"
         shell: bash
         env:
           KEYSTORE_FILE: ${{ env.KEYSTORE_FILE || format('{0}/android/app/release-keystore.jks', github.workspace) }}
@@ -296,7 +346,7 @@ jobs:
           set -euo pipefail
           cd android
           chmod +x gradlew
-          ./gradlew bundleRelease --no-daemon --stacktrace 2>&1 | tee ../gradle_bundle.log || {
+          ./gradlew bundleRelease -PdisableOta=true --no-daemon --stacktrace 2>&1 | tee ../gradle_bundle.log || {
             STATUS=$?
             echo "::error::Gradle bundleRelease failed with exit code $STATUS"
             echo "### ❌ Gradle bundleRelease Failed" >> "$GITHUB_STEP_SUMMARY"
@@ -306,8 +356,28 @@ jobs:
             exit $STATUS
           }
           cd ..
+          AAB_FILE=$(find android/app/build/outputs/bundle -type f -name "*.aab" -print -quit)
+          if [ -z "$AAB_FILE" ]; then
+            echo "::error::AAB output was not found."
+            exit 1
+          fi
+          cp "$AAB_FILE" release_files/Bank_AlDam_Qataba.aab
 
-      - name: "Build release APK"
+      - name: "Build web assets and sync Android (Direct APK - full OTA)"
+        run: |
+          set -euo pipefail
+          npm run build
+          npx cap sync android
+          if [ ! -s "android/app/google-services.json" ] && [ -s "google-services.json" ]; then
+            cp google-services.json android/app/google-services.json
+          fi
+          if ! grep -q "capawesome-capacitor-live-update" android/app/capacitor.build.gradle; then
+            echo "::error::LiveUpdate plugin was not restored for the direct APK build."
+            exit 1
+          fi
+          echo "Verified full OTA restored for direct APK build."
+
+      - name: "Build release APK (with OTA)"
         shell: bash
         env:
           KEYSTORE_FILE: ${{ env.KEYSTORE_FILE || format('{0}/android/app/release-keystore.jks', github.workspace) }}
@@ -329,26 +399,21 @@ jobs:
             exit $STATUS
           }
           cd ..
+          APK_FILE=$(find android/app/build/outputs/apk -type f -name "*.apk" -print -quit)
+          if [ -z "$APK_FILE" ]; then
+            echo "::error::APK output was not found."
+            exit 1
+          fi
+          cp "$APK_FILE" release_files/Bank_AlDam_Qataba.apk
 
-      - name: "Collect release files"
+      - name: "Verify collected release files"
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p release_files
-          if [ ! -d "android/app/build/outputs/bundle" ] || [ ! -d "android/app/build/outputs/apk" ]; then
-            echo "::error::Expected Android build output directories were not created."
+          if [ ! -s "release_files/Bank_AlDam_Qataba.aab" ] || [ ! -s "release_files/Bank_AlDam_Qataba.apk" ]; then
+            echo "::error::Expected Bank_AlDam_Qataba.aab or Bank_AlDam_Qataba.apk was not created."
             exit 1
           fi
-          AAB_FILE=$(find android/app/build/outputs/bundle -type f -name "*.aab" -print -quit)
-          APK_FILE=$(find android/app/build/outputs/apk -type f -name "*.apk" -print -quit)
-
-          if [ -z "$AAB_FILE" ] || [ -z "$APK_FILE" ]; then
-            echo "::error::AAB or APK output was not found."
-            exit 1
-          fi
-
-          cp "$AAB_FILE" release_files/Bank_AlDam_Qataba.aab
-          cp "$APK_FILE" release_files/Bank_AlDam_Qataba.apk
 
       - name: "Upload Google Play AAB"
         uses: actions/upload-artifact@v4
